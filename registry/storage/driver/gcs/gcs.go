@@ -19,6 +19,7 @@ package gcs
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -55,6 +56,7 @@ type driverParameters struct {
 	privateKey    []byte
 	client        *http.Client
 	rootDirectory string
+	projectID     string
 }
 
 func init() {
@@ -94,6 +96,9 @@ func FromParameters(parameters map[string]interface{}) (storagedriver.StorageDri
 	}
 
 	var ts oauth2.TokenSource
+	var key struct {
+		ProjectID string `json:"project_id"`
+	}
 	jwtConf := new(jwt.Config)
 	if keyfile, ok := parameters["keyfile"]; ok {
 		jsonKey, err := ioutil.ReadFile(fmt.Sprint(keyfile))
@@ -102,6 +107,9 @@ func FromParameters(parameters map[string]interface{}) (storagedriver.StorageDri
 		}
 		jwtConf, err = google.JWTConfigFromJSON(jsonKey, storage.ScopeFullControl)
 		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(jsonKey, &key); err != nil {
 			return nil, err
 		}
 		ts = jwtConf.TokenSource(context.Background())
@@ -120,6 +128,7 @@ func FromParameters(parameters map[string]interface{}) (storagedriver.StorageDri
 		email:         jwtConf.Email,
 		privateKey:    jwtConf.PrivateKey,
 		client:        oauth2.NewClient(context.Background(), ts),
+		projectID:     fmt.Sprint(key.ProjectID),
 	}
 
 	return New(params)
@@ -131,6 +140,17 @@ func New(params driverParameters) (storagedriver.StorageDriver, error) {
 	if rootDirectory != "" {
 		rootDirectory += "/"
 	}
+
+	service, err := storageapi.New(params.client)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := service.Buckets.Get(params.bucket).Do(); err != nil {
+		if _, err := service.Buckets.Insert(params.projectID, &storageapi.Bucket{Name: params.bucket}).Do(); err != nil {
+			return nil, err
+		}
+	}
+
 	d := &driver{
 		bucket:        params.bucket,
 		rootDirectory: rootDirectory,
