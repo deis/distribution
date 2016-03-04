@@ -1,6 +1,7 @@
 package s3
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -29,6 +30,8 @@ func init() {
 	encrypt := os.Getenv("S3_ENCRYPT")
 	secure := os.Getenv("S3_SECURE")
 	region := os.Getenv("AWS_REGION")
+	backend := "aws"
+	endpointURL := ""
 	root, err := ioutil.TempDir("", "driver-")
 	if err != nil {
 		panic(err)
@@ -63,6 +66,8 @@ func init() {
 			rootDirectory,
 			storageClass,
 			driverName + "-test",
+			fmt.Sprint(backend),
+			endpointURL,
 		}
 
 		return New(parameters)
