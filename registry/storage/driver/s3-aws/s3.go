@@ -310,6 +310,23 @@ func New(params DriverParameters) (*Driver, error) {
 
 	s3obj := s3.New(session.New(awsConfig))
 
+	_, err := s3obj.CreateBucket(&s3.CreateBucketInput{
+		Bucket: &params.Bucket,
+	})
+	if err != nil {
+		if s3err, ok := err.(awserr.Error); ok {
+			if s3err.Code() != "BucketAlreadyOwnedByYou" && s3err.Code() != "BucketAlreadyExists" {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+
+	if err := s3obj.WaitUntilBucketExists(&s3.HeadBucketInput{Bucket: &params.Bucket}); err != nil {
+		return nil, err
+	}
+
 	// TODO Currently multipart uploads have no timestamps, so this would be unwise
 	// if you initiated a new s3driver while another one is running on the same bucket.
 	// multis, _, err := bucket.ListMulti("", "")
