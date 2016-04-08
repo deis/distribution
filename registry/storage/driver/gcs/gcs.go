@@ -48,7 +48,8 @@ import (
 const driverName = "gcs"
 const dummyProjectID = "<unknown>"
 
-// DriverParameters is a struct that encapsulates all of the driver parameters after all values have been set. Create a new one of these with NewDriverParameters
+// DriverParameters is a struct that encapsulates all of the driver parameters after all values
+// have been set. Create a new one of these with NewDriverParameters
 type DriverParameters struct {
 	bucket        string
 	config        *jwt.Config
