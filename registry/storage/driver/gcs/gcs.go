@@ -59,7 +59,9 @@ type DriverParameters struct {
 	projectID     string
 }
 
-// NewDriverParameters creates and fills in a new DriverParamters struct with the values given. It expects that jsonKey is a byte slice representing the JWT key for the GCS account. If it is specified as nil, this function tries to use the default token source as the token
+// NewDriverParameters creates and fills in a new DriverParamters struct with the values given.
+// It expects that jsonKey is a byte slice representing the JWT key for the GCS account.
+// If it is specified as nil, this function tries to use the default token source as the token
 func NewDriverParameters(bucket string, rootDir string, jsonKey []byte) (*DriverParameters, error) {
 	params := new(DriverParameters)
 	params.bucket = bucket
