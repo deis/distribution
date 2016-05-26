@@ -177,7 +177,7 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 		app.httpHost = *u
 	}
 
-	options := []storage.RegistryOption{}
+	options := registrymiddleware.GetRegistryOptions()
 
 	if app.isCache {
 		options = append(options, storage.DisableDigestResumption)
@@ -258,7 +258,7 @@ func NewApp(ctx context.Context, config *configuration.Configuration) *App {
 		}
 	}
 
-	app.registry, err = applyRegistryMiddleware(app.Context, app.registry, config.Middleware["registry"])
+	app.registry, err = applyRegistryMiddleware(app, app.registry, config.Middleware["registry"])
 	if err != nil {
 		panic(err)
 	}
@@ -647,7 +647,7 @@ func (app *App) dispatcher(dispatch dispatchFunc) http.Handler {
 				repository,
 				app.eventBridge(context, r))
 
-			context.Repository, err = applyRepoMiddleware(context.Context, context.Repository, app.Config.Middleware["repository"])
+			context.Repository, err = applyRepoMiddleware(app, context.Repository, app.Config.Middleware["repository"])
 			if err != nil {
 				ctxu.GetLogger(context).Errorf("error initializing repository middleware: %v", err)
 				context.Errors = append(context.Errors, errcode.ErrorCodeUnknown.WithDetail(err))
@@ -721,9 +721,9 @@ func (app *App) context(w http.ResponseWriter, r *http.Request) *Context {
 		// A "host" item in the configuration takes precedence over
 		// X-Forwarded-Proto and X-Forwarded-Host headers, and the
 		// hostname in the request.
-		context.urlBuilder = v2.NewURLBuilder(&app.httpHost)
+		context.urlBuilder = v2.NewURLBuilder(&app.httpHost, false)
 	} else {
-		context.urlBuilder = v2.NewURLBuilderFromRequest(r)
+		context.urlBuilder = v2.NewURLBuilderFromRequest(r, app.Config.HTTP.RelativeURLs)
 	}
 
 	return context

@@ -7,6 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path"
+	"reflect"
 	"testing"
 
 	"github.com/docker/distribution"
@@ -83,6 +85,15 @@ func TestSimpleBlobUpload(t *testing.T) {
 		t.Fatalf("unexpected error during upload cancellation: %v", err)
 	}
 
+	// get the enclosing directory
+	uploadPath := path.Dir(blobUpload.(*blobWriter).path)
+
+	// ensure state was cleaned up
+	_, err = driver.List(ctx, uploadPath)
+	if err == nil {
+		t.Fatal("files in upload path after cleanup")
+	}
+
 	// Do a resume, get unknown upload
 	blobUpload, err = bs.Resume(ctx, blobUpload.ID())
 	if err != distribution.ErrBlobUploadUnknown {
@@ -128,6 +139,13 @@ func TestSimpleBlobUpload(t *testing.T) {
 		t.Fatalf("unexpected error finishing layer upload: %v", err)
 	}
 
+	// ensure state was cleaned up
+	uploadPath = path.Dir(blobUpload.(*blobWriter).path)
+	_, err = driver.List(ctx, uploadPath)
+	if err == nil {
+		t.Fatal("files in upload path after commit")
+	}
+
 	// After finishing an upload, it should no longer exist.
 	if _, err := bs.Resume(ctx, blobUpload.ID()); err != distribution.ErrBlobUploadUnknown {
 		t.Fatalf("expected layer upload to be unknown, got %v", err)
@@ -139,7 +157,7 @@ func TestSimpleBlobUpload(t *testing.T) {
 		t.Fatalf("unexpected error checking for existence: %v, %#v", err, bs)
 	}
 
-	if statDesc != desc {
+	if !reflect.DeepEqual(statDesc, desc) {
 		t.Fatalf("descriptors not equal: %v != %v", statDesc, desc)
 	}
 
@@ -393,7 +411,7 @@ func TestBlobMount(t *testing.T) {
 		t.Fatalf("unexpected error checking for existence: %v, %#v", err, sbs)
 	}
 
-	if statDesc != desc {
+	if !reflect.DeepEqual(statDesc, desc) {
 		t.Fatalf("descriptors not equal: %v != %v", statDesc, desc)
 	}
 
@@ -419,7 +437,7 @@ func TestBlobMount(t *testing.T) {
 		t.Fatalf("unexpected error mounting layer: %v", err)
 	}
 
-	if ebm.Descriptor != desc {
+	if !reflect.DeepEqual(ebm.Descriptor, desc) {
 		t.Fatalf("descriptors not equal: %v != %v", ebm.Descriptor, desc)
 	}
 
@@ -429,7 +447,7 @@ func TestBlobMount(t *testing.T) {
 		t.Fatalf("unexpected error checking for existence: %v, %#v", err, bs)
 	}
 
-	if statDesc != desc {
+	if !reflect.DeepEqual(statDesc, desc) {
 		t.Fatalf("descriptors not equal: %v != %v", statDesc, desc)
 	}
 

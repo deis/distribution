@@ -18,6 +18,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -80,6 +81,8 @@ func init() {
 		"ap-northeast-1",
 		"ap-northeast-2",
 		"sa-east-1",
+		"cn-north-1",
+		"us-gov-west-1",
 	} {
 		validRegions[region] = struct{}{}
 	}
@@ -136,24 +139,26 @@ func FromParameters(parameters map[string]interface{}) (*Driver, error) {
 		secretKey = ""
 	}
 
+	regionEndpoint := parameters["regionendpoint"]
+	if regionEndpoint == nil {
+		regionEndpoint = ""
+	}
+
 	regionName, ok := parameters["region"]
 	if regionName == nil || fmt.Sprint(regionName) == "" {
 		return nil, fmt.Errorf("No region parameter provided")
 	}
 	region := fmt.Sprint(regionName)
-	_, ok = validRegions[region]
-	if !ok {
-		return nil, fmt.Errorf("Invalid region provided: %v", region)
+	// Don't check the region value if a custom endpoint is provided.
+	if regionEndpoint == "" {
+		if _, ok = validRegions[region]; !ok {
+			return nil, fmt.Errorf("Invalid region provided: %v", region)
+		}
 	}
 
 	bucket := parameters["bucket"]
 	if bucket == nil || fmt.Sprint(bucket) == "" {
 		return nil, fmt.Errorf("No bucket parameter provided")
-	}
-
-	regionEndpoint := parameters["regionendpoint"]
-	if regionEndpoint == nil {
-		regionEndpoint = ""
 	}
 
 	encryptBool := false
@@ -733,6 +738,12 @@ func (d *driver) newWriter(key, uploadID string, parts []*s3.Part) storagedriver
 	}
 }
 
+type completedParts []*s3.CompletedPart
+
+func (a completedParts) Len() int           { return len(a) }
+func (a completedParts) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a completedParts) Less(i, j int) bool { return *a[i].PartNumber < *a[j].PartNumber }
+
 func (w *writer) Write(p []byte) (int, error) {
 	if w.closed {
 		return 0, fmt.Errorf("already closed")
@@ -745,19 +756,22 @@ func (w *writer) Write(p []byte) (int, error) {
 	// If the last written part is smaller than minChunkSize, we need to make a
 	// new multipart upload :sadface:
 	if len(w.parts) > 0 && int(*w.parts[len(w.parts)-1].Size) < minChunkSize {
-		var completedParts []*s3.CompletedPart
+		var completedUploadedParts completedParts
 		for _, part := range w.parts {
-			completedParts = append(completedParts, &s3.CompletedPart{
+			completedUploadedParts = append(completedUploadedParts, &s3.CompletedPart{
 				ETag:       part.ETag,
 				PartNumber: part.PartNumber,
 			})
 		}
+
+		sort.Sort(completedUploadedParts)
+
 		_, err := w.driver.S3.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
 			Bucket:   aws.String(w.driver.Bucket),
 			Key:      aws.String(w.key),
 			UploadId: aws.String(w.uploadID),
 			MultipartUpload: &s3.CompletedMultipartUpload{
-				Parts: completedParts,
+				Parts: completedUploadedParts,
 			},
 		})
 		if err != nil {
@@ -897,19 +911,23 @@ func (w *writer) Commit() error {
 		return err
 	}
 	w.committed = true
-	var completedParts []*s3.CompletedPart
+
+	var completedUploadedParts completedParts
 	for _, part := range w.parts {
-		completedParts = append(completedParts, &s3.CompletedPart{
+		completedUploadedParts = append(completedUploadedParts, &s3.CompletedPart{
 			ETag:       part.ETag,
 			PartNumber: part.PartNumber,
 		})
 	}
+
+	sort.Sort(completedUploadedParts)
+
 	_, err = w.driver.S3.CompleteMultipartUpload(&s3.CompleteMultipartUploadInput{
 		Bucket:   aws.String(w.driver.Bucket),
 		Key:      aws.String(w.key),
 		UploadId: aws.String(w.uploadID),
 		MultipartUpload: &s3.CompletedMultipartUpload{
-			Parts: completedParts,
+			Parts: completedUploadedParts,
 		},
 	})
 	if err != nil {
